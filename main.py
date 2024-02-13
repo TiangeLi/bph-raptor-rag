@@ -21,7 +21,7 @@ os.environ['OPENAI_API_KEY'] = os.getenv("LLM_APIKEY")
 page_name = 'Chat BPH'
 GPT_3 = 'gpt-3.5-turbo-0125'
 GPT_4 = 'gpt-4-turbo-preview'
-llm = ChatOpenAI(model=GPT_3,temperature=0.6, max_tokens=2048, verbose=False)
+llm = ChatOpenAI(model=GPT_4,temperature=0.5, max_tokens=2048, verbose=False)
 summ = ChatOpenAI(model=GPT_3, temperature=0, max_tokens=512, verbose=False)
 
 # ------------------------------------------------------------------- #
