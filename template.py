@@ -1,3 +1,20 @@
+PSIZE_AND_TX = \
+    {"Not Known": "all available treatment options",
+    "Enlarged (<80mL)": "B-TURP, M-TURP, Rezum, UroLift, Aquablation, Enucleation, GreenLight Laser Vaporization",
+    "Very enlarged (80-150mL)": "Aquablation, Enucleation, GreenLight Laser Vaporization, Open simple prostatectomy, Robotic prostate removal", 
+    "Extremely enlarged (>150 mL)": "Enucleation, GreenLight Laser Vaporization, Open simple prostatectomy, Robotic prostate removal"}
+PSIZE_CATEGORIES = [i for i in PSIZE_AND_TX]
+PSIZE_STRING = f'[{", ".join(PSIZE_CATEGORIES)}]'
+_PSIZE_BULLET_LIST = "\n".join(f"- {i}" for i in PSIZE_CATEGORIES[1:])
+AI_GREETING_MSG = \
+f"""Hello! Ask me anything about surgical options for managing BPH (Benign Prostatic Hyperplasia)!
+
+To best assist you, it would be helpful to know the size of your prostate, if you have been informed by your healthcare provider:
+{_PSIZE_BULLET_LIST}
+
+It's okay if you're not sure! I can provide an overview of all available surgical treatments or any specific questions about treatments."""
+
+
 memory_template = \
 """I am a helpful agent. This is my personal memory of the conversation so far:
 

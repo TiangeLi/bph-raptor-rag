@@ -14,7 +14,7 @@ from langchain.prompts.chat import (
 )
 from langchain.schema import AIMessage, HumanMessage
 
-from template import template, text, summary_template, memory_template
+from template import template, text, summary_template, memory_template, AI_GREETING_MSG
 
 load_dotenv()
 os.environ['OPENAI_API_KEY'] = os.getenv("LLM_APIKEY")
@@ -31,10 +31,10 @@ summ_prompt = deque([HumanMessagePromptTemplate.from_template(summary_template)]
 memm_prompt = deque([AIMessagePromptTemplate.from_template(memory_template)])
 
 if "messages" not in st.session_state:
-    ss.messages = []
+    ss.messages = [{"role": "ai", "content": AI_GREETING_MSG}]
 
 if "llm_messages" not in st.session_state:
-    ss.llm_messages = deque([], maxlen=10)
+    ss.llm_messages = deque([AIMessage(content=AI_GREETING_MSG)], maxlen=10)
 system_prompt = deque([system_prompt])
 
 if "summary" not in st.session_state:
