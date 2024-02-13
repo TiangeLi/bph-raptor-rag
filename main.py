@@ -42,7 +42,7 @@ if "summary" not in st.session_state:
 
 # ------------------------------------------------------------------- #
 
-
+st.set_page_config(page_title=page_name)
 st.title(page_name)
 
 for message in ss.messages:
