@@ -27,8 +27,8 @@ page_name = 'Chat BPH'
 st.set_page_config(page_title=page_name)
 st.title(page_name)
 
-GPT_3 = 'gpt-3.5-turbo-0125'
-GPT_4 = 'gpt-4-turbo-preview'
+GPT_3 = 'gpt-3.5-turbo'
+GPT_4 = 'gpt-4o'
 llm = ChatOpenAI(model=GPT_4,temperature=0.7, max_tokens=2048, verbose=False)
 summ = ChatOpenAI(model=GPT_3, temperature=0, max_tokens=512, verbose=False)
 suggester = ChatOpenAI(model=GPT_3, temperature=1.0, max_tokens=256)
