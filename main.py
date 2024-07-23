@@ -105,9 +105,9 @@ st_prompt = StState('prompt', default='')
 
 example_qs = [
         "What are the sexual side effects of TURP, Rezum, and Greenlight?",
-        "Can you give a general overview on all the treatment options, focusing on retreatment risk?",
-        "For a 55cc prostate, compare treatment options in a table in terms of catheter use and retention risk.",
-        "Which treatments are suitable while remaining on anticoagulation therapy?"
+        "For a 55cc prostate, compare surgical options in a table in terms of catheter use and retention risk.",
+        "Which treatments are suitable while remaining on anticoagulation?",
+        "Which treatment is best if I want to preserve sexual function?"
     ]
 st_generated_qs = StState('generated_qs', default=example_qs)
 
