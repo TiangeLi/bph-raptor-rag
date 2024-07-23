@@ -184,7 +184,7 @@ if prompt := st.chat_input("") or ss.prompt:
                 question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
                 queries_dict = generate_queries.invoke(question)
 
-                #st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
+                st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
 
                 st.write('Retrieving Documents...')
                 queries_list = [q for q in queries_dict.values() if q]
@@ -204,9 +204,7 @@ if prompt := st.chat_input("") or ss.prompt:
 
 
                 compressed = [{'compressed': doc.page_content, 'metadata': doc.metadata} for doc in ret]  # we're not actually compressing here, just passing through. TODO: remove.
-
-
-                
+                #compressed = compressor_chain.map().invoke([{ 'question': queries_dict['rephrased'], 'document': r, 'summary': ss.convo_summary} for r in ret])
                 c = [f'```Document #{i+1}\nSOURCE: {r['metadata'].get('Title', r['metadata'])}\n\n{r['compressed']}```' for i, r in enumerate(compressed)]
                 context = "\n\n".join(c)
 
