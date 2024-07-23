@@ -7,6 +7,27 @@ import json
 from langchain.load import dumps, loads
 from template import meds_abbrevs_table, surg_abbrevs_table, other_abbrevs_table
 
+unify_template = f"""ABBREVIATIONS
+{meds_abbrevs_table}
+
+{surg_abbrevs_table}
+
+{other_abbrevs_table}
+END OF ABBREVIATIONS
+
+Given the a list of terms, return a unified list of terms that are equivalent or similar in meaning, using the above abbreviations and equivalency tables.
+
+Related terms can be combined with a slash (/) between them.
+Subterms can be included in parentheses after the main term, if applicable. 
+Any repeats should be removed or consolidated with or within another term.
+
+For example:
+Terms: TURP, Urolift, AEEP, PVP, B-TURP, ThuLEP, Laser Enucleation
+Output: TURP (B-TURP), AEEP / Laser Enucleation (ThuLEP), PVP, Urolift
+
+Just return single string with the unified terms separated by commas, without any additional text or formatting."""
+
+
 template = f"""ABBREVIATIONS
 {meds_abbrevs_table}
 
@@ -50,8 +71,24 @@ prompt = ChatPromptTemplate.from_messages(
     ]
 )
 
+unify_prompt = ChatPromptTemplate.from_messages(
+    [
+        SystemMessage(content=unify_template),
+        ('human', 'Terms: {terms}')
+    ]
+)
+
+
+
 @chain
-def generate_queries(question: str):
+def generate_queries(_input: dict):
+    q_raw, summary, treatments = _input['question'], _input['summary'], _input['tx_options']
+
+    unify = unify_prompt | ChatOpenAI(model='gpt-4o', temperature=0) | StrOutputParser()
+    unified_tx = unify.invoke({'terms': treatments})
+
+    question = q_raw+'\n\n'+'discuss '+f'{unified_tx}'+'\n\n'+summary
+
     generate = prompt | ChatOpenAI(model='gpt-4o', temperature=0) | StrOutputParser()
     qs = generate.invoke(question)
     qs = json.loads(qs.strip('```json\n').strip('```'))

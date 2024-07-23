@@ -83,6 +83,8 @@ surg_abbrevs_table = \
 
 |Term|Examples, Equivalents, Brand Names|
 |---|---|
+|Laser vaporisation|GreenLight PVP, etc.|
+|Laser enucleation|HoLEP, ThuLEP, etc.|
 |AEEP|HoLEP, ThuLEP|
 |PVP|Greenlight PVP|
 |PUL|Urolift|

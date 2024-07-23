@@ -164,16 +164,14 @@ if prompt := st.chat_input("") or ss.prompt:
             if len(relevant_tx) > 0:
                 relevant_tx_str = ', and '.join(relevant_tx)
                 relevant_tx_str = f'Based on my query, the recommended surgical therapies based on guideline algorithms are {relevant_tx_str}.\
-                    \n\nProvide a very succinct summary at the start to highlight which treatments are recommended by which guideline.\n\
-                    Since different guidelines use different terms to refer to the same treatment, try to unify them using this reference table:\n\n\
+                    Since different guidelines use different terms to refer to the same treatment, always unify them using this reference table:\n\n\
                     {surg_abbrevs_table}\n\n\
                     Then, discuss in more detail the treatments relevant to my exact query above.\n\n'
             else:
                 relevant_tx_str = ''
             
-            guiding_prompt = SystemMessage(content=f'{relevant_tx_str}\
-                                           You should give a brief overview of the differences between the guidelines at the start of your response. \
-                                           \nYou should try to combine the information from each guideline where possible, highlighting only major differences as you go, if applicable.')
+            guiding_prompt = SystemMessage(content=
+                f'{relevant_tx_str}You should try to combine the information from each guideline where possible, highlighting only major differences as you go, if applicable.\nYou should give a brief comparison between the guidelines (CUA, AUA, EAU), at the end of your response.')
 
             routed = router_chain.invoke({"question":prompt, 'summary': ss.convo_summary}).lower().strip()
             if routed == 'no' and all(i == 'none' for i in tx_options):
@@ -181,10 +179,10 @@ if prompt := st.chat_input("") or ss.prompt:
                 ret = None
                 queries_dict = {'rephrased': prompt, 'original': prompt}  # no changes or query expansion. 
             else:  # routed == 'yes' or routed == any other string or tx_options is present; we treat it as 'yes'
-                question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
-                queries_dict = generate_queries.invoke(question)
+                #question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
+                queries_dict = generate_queries.invoke({'question': prompt, 'tx_options': [i for i in tx_options if i != 'none'], 'summary': ss.convo_summary})
 
-                #st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
+                st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
 
                 st.write('Retrieving Documents...')
                 queries_list = [q for q in queries_dict.values() if q]
