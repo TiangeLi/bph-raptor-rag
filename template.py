@@ -93,10 +93,13 @@ surg_abbrevs_table = \
 meds_abbrevs_table = \
 """|Abbrev.|Medical Terms|
 |---|---|
+|α1-blockers|α1-Adrenoceptor antagonists|
 |5-ARI|5-Alpha Reductase Inhibitor|
-|MTOPS|Medical Therapy of Prostatic Symptoms|
+|Antimuscarinics|Anticholinergics, muscarinic receptor antagonists|
+|Beta-3 agonists|Beta-3 adrenoceptor agonists|
 |PDE5|Phosphodiesterase-5|
-|PDE5i|Phosphodiesterase-5 inhibitor|"""
+|PDE5i|Phosphodiesterase-5 inhibitor|
+|Combo|Combination therapy|"""
 
 other_abbrevs_table = \
 """|Abbrev.|Other Related Terms|
@@ -120,6 +123,7 @@ other_abbrevs_table = \
 |LUTS|Lower Urinary Tract Symptoms|
 |LUTS/BPH|Male Lower Urinary Tract Symptoms secondary/attributed to BPH|
 |MRI|Magnetic Resonance Imaging|
+|MTOPS|Medical Therapy of Prostatic Symptoms|
 |MDD|Minimally Detectable Difference|
 |OAB|Overactive Bladder|
 |PPMS|Patient Perception of Study Medication|
@@ -129,4 +133,5 @@ other_abbrevs_table = \
 |RCT|Randomized Controlled Trials|
 |RE|Retrograde Ejaculation|
 |TRUS|Transurethral Ultrasound|
-|UTI|Urinary Tract Infection|"""
+|UTI|Urinary Tract Infection|
+|WW|Watchful Waiting|"""

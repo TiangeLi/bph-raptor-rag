@@ -3,8 +3,11 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
 from template import surg_abbrevs_table
 from langchain_core.runnables import chain
+from langchain_core.documents import Document
 
 from langchain_text_splitters import MarkdownHeaderTextSplitter
+
+from contextual_compressor import compressor_chain
 
 headers_to_split_on = [
     ("#", "Title"),
@@ -22,59 +25,76 @@ markdown_splitter_with_header = MarkdownHeaderTextSplitter(
     )
 
 
-template = \
-f"""You are an AI agent that helps users find information about BPH.
-Given a user query and conversation summary, determine if the provided BACKGROUND information is relevant to the query and would help answer their question. 
+sys_template = \
+f"""Use this abbreviations table to help you understand the background information:
+{surg_abbrevs_table}"""
 
-Use this abbreviations table to help you understand the background information:
-```{surg_abbrevs_table}```
 
-BACKGROUND DOCUMENT
-Document metadata:
-{{metadata}}
-
-Document:
-{{background}}
+hum_template = \
+"""BACKGROUND DOCUMENT
+{doc_contents}
 END OF BACKGROUND DOCUMENT
 
-Reply YES if the background information contains relevant information to the user query and would help answer their question.
-Reply NO if the background information is not relevant to the user query and would not help answer their question.
+Query: {question}
+
+Task:
+Consider each ENTITY in the Query.
+Consider each FOCUS/TOPIC of the BACKGROUND DOCUMENT.
+Your ONLY job is to classify YES or NO. 
+
+Rules:
+- NO: If NONE of the entities are discussed in the BACKGROUND DOCUMENT.
+- YES: if the BACKGROUND DOCUMENT's primary FOCUS contains information pertinent to ANY of the entities in the Query (including any Examples, Equivalents, Brand Names, Abbreviations, etc.)
 
 Remember: ONLY use the BACKGROUND DOCUMENT to inform your decision.
-
-Conversation summary:
-```{{summary}}```"""
+Reply YES or NO"""
 
 
 filter_prompt = ChatPromptTemplate.from_messages(
-    [
-        ('system', template),
-        ('human', 'Query: {question}')  
-    ]
-)
+    [('system', sys_template),
+    ('human', hum_template)])
 
+filter_llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)
 
 @chain
 def doc_filter_chain(_input: dict):
-    queries_dict, metadata, background, summary = _input['queries_dict'], _input['metadata'], _input['background'], _input['summary']
-    _chain = filter_prompt | ChatOpenAI(model='gpt-4o-mini', temperature=0) | StrOutputParser()
-    splits = markdown_splitter_with_header.split_text(background)
-    filtered = _chain.batch([{
-        'question': queries_dict['rephrased'],
-        'metadata': {**metadata, **{k: v for k, v in s.metadata.items() if k not in metadata}},
-        'background': s.page_content,
-        'summary': summary} 
-        for s in splits])
+    queries_dict, document = _input['queries_dict'], _input['document']
+    _chain = filter_prompt | filter_llm | StrOutputParser()
+
+    # split docs and integrate metadata
+    split_docs = markdown_splitter_with_header.split_text(document.page_content)
+    for s in split_docs:
+        s.metadata = {**document.metadata, **{k: v for k, v in s.metadata.items() if k not in document.metadata}}
+
+    # filter based on metadata only. keep YES, continue to filter NO based on full text
+    metadata_filter = _chain.batch([
+        {
+            'question': queries_dict['rephrased'],
+            'doc_contents': s.metadata
+        }
+        for s in split_docs])
+    rejected_splits_on_metadata = [s for s, f in zip(split_docs, metadata_filter) if f.strip().lower() == 'no']
+    filtered_on_metadata = [s for s, f in zip(split_docs, metadata_filter) if f.strip().lower() == 'yes']
     
-    if any([f.strip().lower() == 'yes' for f in filtered]):
-        return 'YES'
-    elif queries_list_without_rephrased_or_original := [q for q in queries_dict.values() if q not in [queries_dict['rephrased'], queries_dict['original']]]:
-        filtered = _chain.batch([{
-            'question': q,
-            'metadata': {**metadata, **{k: v for k, v in s.metadata.items() if k not in metadata}},
-            'background': s.page_content,
-            'summary': summary} 
-            for s in splits for q in queries_list_without_rephrased_or_original])
-        return 'YES' if any([f.strip().lower() == 'yes' for f in filtered]) else 'NO'
-    else:
-        return 'NO'
+    # filter rejected docs, now based on full text
+    compressed_filtered_on_doc = []
+    if rejected_splits_on_metadata:
+        doc_filter = _chain.batch([
+            {
+                'question': queries_dict['rephrased'],
+                'doc_contents': f'Document metadata:\n{s.metadata}\n\nDocument:\n{s.page_content}'
+            }
+            for s in rejected_splits_on_metadata])
+        raw_filtered_on_doc = [s for s, f in zip(rejected_splits_on_metadata, doc_filter) if f.strip().lower() == 'yes']
+        compressed_filtered_on_doc = compressor_chain.batch([
+            {'question': queries_dict['rephrased'], 
+            'document': s} 
+            for s in raw_filtered_on_doc])
+    
+    # reconstruct docs
+    filtered_docs = filtered_on_metadata + compressed_filtered_on_doc
+    filtered = Document(
+        page_content='\n\n'.join([s.page_content for s in filtered_docs]),
+        metadata=document.metadata
+    )
+    return filtered

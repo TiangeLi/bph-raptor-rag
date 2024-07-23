@@ -2,7 +2,8 @@ import os
 import json
 from dotenv import load_dotenv
 load_dotenv()
-os.environ['OPENAI_API_KEY'] = os.getenv("LLM_APIKEY")
+os.environ['OPENAI_API_KEY'] = os.getenv("OPENAI_APIKEY")
+os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_APIKEY")
 os.environ['LANGCHAIN_TRACING_V2'] = 'true'
 os.environ['LANGCHAIN_API_KEY'] = os.getenv('LS_APIKEY')
 os.environ['LANGCHAIN_ENDPOINT'] = 'https://api.smith.langchain.com'
@@ -178,11 +179,12 @@ if prompt := st.chat_input("") or ss.prompt:
             if routed == 'no' and all(i == 'none' for i in tx_options):
                 context = 'n/a'
                 ret = None
+                queries_dict = {'rephrased': prompt, 'original': prompt}  # no changes or query expansion. 
             else:  # routed == 'yes' or routed == any other string or tx_options is present; we treat it as 'yes'
                 question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
+                queries_dict = generate_queries.invoke(question)
 
                 st.write('Retrieving Documents...')
-                queries_dict = generate_queries.invoke(question)
                 queries_list = [q for q in queries_dict.values() if q]
                 cua_ret = (cua_retreiver.map() | reciprocal_rank_fusion).invoke(queries_list)
                 aua_ret = (aua_retreiver.map() | reciprocal_rank_fusion).invoke(queries_list)
@@ -190,18 +192,17 @@ if prompt := st.chat_input("") or ss.prompt:
                 ret = reciprocal_rank_fusion([cua_ret, aua_ret, eau_ret])
                 print(len(ret))
 
-                st.write('Filtering Documents...')
+                st.write('Compressing and Synthesizing Query...')
                 filtered_ret = doc_filter_chain.map().invoke([{
-                    'metadata':r.metadata, 
-                    'background': r.page_content, 
-                    'queries_dict': queries_dict,
-                    'summary': ss.convo_summary} for r in ret])
-                ret = [r for r, f in zip(ret, filtered_ret) if f.lower().strip() == 'yes']
+                    'document': r,
+                    'queries_dict': queries_dict}
+                    for r in ret])
+                ret = [f for f in filtered_ret if f.page_content]# [r for r, f in zip(ret, filtered_ret) if f.lower().strip() == 'yes']
                 print(len(ret))
 
-                
-                st.write('Compressing and synthesizing Query...')
-                compressed = compressor_chain.map().invoke([{ 'question': queries_dict['rephrased'], 'document': r, 'summary': ss.convo_summary} for r in ret])
+
+                compressed = [{'compressed': doc.page_content, 'metadata': doc.metadata} for doc in ret]  # we're not actually compressing here, just passing through. TODO: remove.
+                #compressed = compressor_chain.map().invoke([{ 'question': queries_dict['rephrased'], 'document': r, 'summary': ss.convo_summary} for r in ret])
 
 
                 

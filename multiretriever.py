@@ -30,7 +30,7 @@ Remember: If you determine that the original question does not need to be broken
 
 For all subquestions, including the rephrased question: don't forget to include all known names/abbreviations for each treatment in the subquestions.
 
-Return just a JSON object in exactly this template: 
+Return just a JSON object in exactly this template; each subquestion should only cover a single treatment, and the rephrased question should encompass all treatments in the original question: 
 
 ```json
 {{
