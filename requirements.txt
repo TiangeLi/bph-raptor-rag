@@ -2,5 +2,4 @@ openai
 langchain
 python-dotenv
 langchain_openai
-json
 langchain-text-splitters
