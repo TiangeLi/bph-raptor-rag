@@ -182,7 +182,7 @@ if prompt := st.chat_input("") or ss.prompt:
                 #question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
                 queries_dict = generate_queries.invoke({'question': prompt, 'tx_options': [i for i in tx_options if i != 'none'], 'summary': ss.convo_summary})
 
-                st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
+                #st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
 
                 st.write('Retrieving Documents...')
                 queries_list = [q for q in queries_dict.values() if q]
