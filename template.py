@@ -78,6 +78,7 @@ surg_abbrevs_table = \
 |TUNA|Transurethral Needle Ablation|
 |TURP|Transurethral Resection of the Prostate|
 |TUVP|Transurethral Vaporization of the Prostate|
+|WAVE|Convective Water Vapor Energy Ablation|
 |WVTT|Water Vapor Thermal Therapy|
 
 |Term|Examples, Equivalents, Brand Names|
@@ -88,7 +89,8 @@ surg_abbrevs_table = \
 |RWT|Aquablation, AquaBeam|
 |TIPD|iTIND, Temporary implantable nitinol device|
 |TURP|B-TURP, M-TURP|
-|WVTT|Rezum, Convective water vapour energy ablation|"""
+|WVTT|Rezum, WAVE|
+|MIST|Aquablation, PAE, Rezum, iTIND, Urolift|"""
 
 meds_abbrevs_table = \
 """|Abbrev.|Medical Terms|
