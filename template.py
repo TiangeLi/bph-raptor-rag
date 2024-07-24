@@ -58,7 +58,8 @@ Do NOT make reference to the BACKGROUND INFORMATION in your answer."""
 
 
 surg_abbrevs_table = \
-"""|Abbrev.|Surgical Terms|
+"""Surgical Treatments Table:
+|Abbrev.|Surgical Terms|
 |---|---|
 |AEEP|Anatomic endoscopic enucleation of the prostate|
 |HoLEP|Holmium Laser Enucleation of the Prostate|
@@ -81,9 +82,10 @@ surg_abbrevs_table = \
 |WAVE|Convective Water Vapor Energy Ablation|
 |WVTT|Water Vapor Thermal Therapy|
 
+Equivalent Terms Table:
 |Term|Examples, Equivalents, Brand Names|
 |---|---|
-|Laser vaporisation|GreenLight PVP, etc.|
+|Laser vaporisation|GreenLight PVP (or thulium laser vaporisation, diode laser vaporisation, etc.)|
 |Laser enucleation|HoLEP, ThuLEP, etc.|
 |AEEP|HoLEP, ThuLEP|
 |PVP|Greenlight PVP|
@@ -95,7 +97,8 @@ surg_abbrevs_table = \
 |MIST|Aquablation, PAE, Rezum, iTIND, Urolift|"""
 
 meds_abbrevs_table = \
-"""|Abbrev.|Medical Terms|
+"""Medical Treatments Table:
+|Abbrev.|Medical Terms|
 |---|---|
 |α1-blockers|α1-Adrenoceptor antagonists|
 |5-ARI|5-Alpha Reductase Inhibitor|
@@ -106,7 +109,8 @@ meds_abbrevs_table = \
 |Combo|Combination therapy|"""
 
 other_abbrevs_table = \
-"""|Abbrev.|Other Related Terms|
+"""Other Abbreviations Table:
+|Abbrev.|Other Related Terms|
 |---|---|
 |AUR|Acute Urinary Retention|
 |AUA|American Urological Association|
@@ -120,6 +124,7 @@ other_abbrevs_table = \
 |ED|Erectile Dysfunction|
 |EF|Erectile Function|
 |GSA|Global Subjective Assessment|
+|GH|Gross Hematuria|
 |IIEF|International Index of Erectile Function|
 |IFIS|Intraoperative Floppy Iris Syndrome|
 |IPSS|International Prostate Symptom Score|

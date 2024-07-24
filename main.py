@@ -7,14 +7,15 @@ os.environ["ANTHROPIC_API_KEY"] = os.getenv("ANTHROPIC_APIKEY")
 os.environ['LANGCHAIN_TRACING_V2'] = 'true'
 os.environ['LANGCHAIN_API_KEY'] = os.getenv('LS_APIKEY')
 os.environ['LANGCHAIN_ENDPOINT'] = 'https://api.smith.langchain.com'
-os.environ['LANGCHAIN_PROJECT'] = 'bph-gpt-raptor'
+os.environ['LANGCHAIN_PROJECT'] = os.getenv('LS_PROJECT_NAME')
+
+DISPLAYS_TOPIC_EXPANSION = True if int(os.getenv('DISPLAYS_TOPIC_EXPANSION')) else False
 
 from collections import deque
 
 import streamlit as st
 from streamlit import session_state as ss
 
-from langchain_openai import ChatOpenAI
 from langchain.prompts.chat import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
@@ -27,8 +28,8 @@ from st_utils import  StState
 
 from multiretriever import generate_queries, reciprocal_rank_fusion
 from routingagent import router_chain
-from algoreader import tx_algo_chain, aua_surg_algo, cua_surg_algo, eau_surg_algo
-from constants import conv_llm, summ_llm, sugg_llm, embd
+from algoreader import tx_algo_chain
+from constants import EMBD, CONVLLM, SUMMLLM
 from llm_doc_filter import doc_filter_chain
 from contextual_compressor import compressor_chain
 
@@ -65,7 +66,7 @@ def get_retriever(pickle_directory, top_k=3):
     with open(f'pkl/{pickle_directory}/docs.pkl', 'rb') as file:
         docs = pickle.load(file)
 
-    vectorstore = FAISS.from_documents(summary_docs, embd)
+    vectorstore = FAISS.from_documents(summary_docs, EMBD)
     store = InMemoryByteStore()
     id_key = 'doc_id'
     retriever = MultiVectorRetriever(
@@ -152,37 +153,35 @@ if prompt := st.chat_input("") or ss.prompt:
         with st.status('Reading Guidelines...', expanded=True) as status:
 
             st.write('Generating Topic Expansion...')
-            algos = [aua_surg_algo, cua_surg_algo, eau_surg_algo]
-            names = ['AUA', 'CUA', 'EAU']
-            algos = [{'question': prompt, 'algo': algo, 'summary':ss.convo_summary} for algo in algos]
-            tx_options = [b.lower().strip() for b in tx_algo_chain.batch(algos)]
-
-            relevant_tx = []
-            for i,algo in enumerate(names):
-                if tx_options[i] != 'none': relevant_tx.append(f'[{tx_options[i].upper()}] according to the {algo} Guidelines')
-            
-            if len(relevant_tx) > 0:
-                relevant_tx_str = ', and '.join(relevant_tx)
-                relevant_tx_str = f'Based on my query, the recommended surgical therapies based on guideline algorithms are {relevant_tx_str}.\
-                    Since different guidelines use different terms to refer to the same treatment, always unify them using this reference table:\n\n\
-                    {surg_abbrevs_table}\n\n\
-                    Then, discuss in more detail the treatments relevant to my exact query above.\n\n'
-            else:
-                relevant_tx_str = ''
-            
-            guiding_prompt = SystemMessage(content=
-                f'{relevant_tx_str}You should try to combine the information from each guideline where possible, highlighting only major differences as you go, if applicable.\nYou should give a brief comparison between the guidelines (CUA, AUA, EAU), at the end of your response.')
-
             routed = router_chain.invoke({"question":prompt, 'summary': ss.convo_summary}).lower().strip()
-            if routed == 'no' and all(i == 'none' for i in tx_options):
+            if routed == 'no':
                 context = 'n/a'
                 ret = None
-                queries_dict = {'rephrased': prompt, 'original': prompt}  # no changes or query expansion. 
-            else:  # routed == 'yes' or routed == any other string or tx_options is present; we treat it as 'yes'
-                #question = prompt+'\n\n'+'discuss '+f'{[i for i in tx_options]}'+'\n\n'+ss.convo_summary
-                queries_dict = generate_queries.invoke({'question': prompt, 'tx_options': [i for i in tx_options if i != 'none'], 'summary': ss.convo_summary})
+                queries_dict = {}  # no changes or query expansion. 
+                algo_ans_dict = {}
+                guiding_prompt = None
+            else:  # routed == 'yes' or routed == any other string
 
-                #st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
+                _algo_ans: dict = tx_algo_chain.invoke({'question': prompt, 'summary': ss.convo_summary})
+                algo_ans_dict = {k: v for k, v in _algo_ans.items() if (v and k != 'metadata')}
+                algo_ans_str = '\n\n'.join([v for k, v in algo_ans_dict.items() if v]) 
+                if algo_ans_dict:
+                    recommendations_str = 'For the next user query, the recommendations are as follows:\n\n'+\
+                        f'{algo_ans_str}\n\n'+\
+                        f'Since different guidelines use different terms to refer to the same treatment, always unify them using this reference table:\n\n{surg_abbrevs_table}'+\
+                        '\n\n'
+                else:
+                    recommendations_str = ''
+                
+                guiding_prompt = SystemMessage(content=
+                    f'{recommendations_str}You should try to combine the information from each guideline where possible, highlighting only major differences as you go, if applicable.\n'+\
+                    'You should give a brief comparison between the guidelines (CUA, AUA, EAU), at the end of your response.')
+
+
+                queries_dict = generate_queries.invoke({'question': prompt, 'tx_options': _algo_ans['metadata'], 'summary': ss.convo_summary})
+
+                if DISPLAYS_TOPIC_EXPANSION:  # only for debugging
+                    st.dataframe({k:v for k, v in queries_dict.items() if k != 'original'})
 
                 st.write('Retrieving Documents...')
                 queries_list = [q for q in queries_dict.values() if q]
@@ -206,19 +205,24 @@ if prompt := st.chat_input("") or ss.prompt:
                 c = [f'```Document #{i+1}\nSOURCE: {r['metadata'].get('Title', r['metadata'])}\n\n{r['compressed']}```' for i, r in enumerate(compressed)]
                 context = "\n\n".join(c)
 
-            print('\n', routed, tx_options, len(ret) if ret else 0, len([r for r in ret if r.metadata.get('Header 1')]) if ret else 0, '\n')
+            print('\n', routed, algo_ans_dict, len(ret) if ret else 0, len([r for r in ret if r.metadata.get('Header 1')]) if ret else 0, '\n')
 
             status.update(label='Complete!', state='complete', expanded=False)
 
 
         msgs = system_prompt+memm_prompt+ss.llm_msgs
-        msgs.append(guiding_prompt)
-        msgs.append(HumanMessage(content=queries_dict['rephrased']))
+        if guiding_prompt: msgs.append(guiding_prompt)
+
+        msgs.append(HumanMessage(content=prompt))
+        if queries_dict.get('reorganized'):
+            _q = f'Based on the query and context, I think the user is asking: {queries_dict["reorganized"]}'
+            msgs.append(AIMessage(content=_q))
+
         formated = ChatPromptTemplate.from_messages(msgs)
 
         ss.llm_msgs.append(HumanMessage(content=prompt))
         
-        stream = conv_llm.stream(formated.format_prompt(context=context, summary=ss.convo_summary).to_messages())
+        stream = CONVLLM.stream(formated.format_prompt(context=context, summary=ss.convo_summary).to_messages())
         response = st.write_stream(stream)
 
         #ss.ui_msgs.append({"role": "ai", "content": response})
@@ -227,7 +231,7 @@ if prompt := st.chat_input("") or ss.prompt:
 
     with st.spinner('Getting Sources...'):
         to_summ = ChatPromptTemplate.from_messages(memm_prompt+ss.llm_msgs+summ_prompt)
-        ss.convo_summary = summ_llm(to_summ.format_prompt(summary=ss.convo_summary).to_messages()).content
+        ss.convo_summary = SUMMLLM(to_summ.format_prompt(summary=ss.convo_summary).to_messages()).content
 
         if ret:
             sources = [r.metadata for r in ret if r.metadata.get('Header 1')]

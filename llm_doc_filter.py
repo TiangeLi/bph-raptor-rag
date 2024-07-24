@@ -1,13 +1,12 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
 from template import surg_abbrevs_table
 from langchain_core.runnables import chain
 from langchain_core.documents import Document
-
 from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 from contextual_compressor import compressor_chain
+from constants import FILTLLM
 
 headers_to_split_on = [
     ("#", "Title"),
@@ -44,7 +43,7 @@ Your ONLY job is to classify YES or NO.
 
 Rules:
 - NO: If NONE of the entities are discussed in the BACKGROUND DOCUMENT.
-- YES: if the BACKGROUND DOCUMENT's primary FOCUS contains information pertinent to ANY of the entities in the Query (including any Examples, Equivalents, Brand Names, Abbreviations, etc.)
+- YES: if the BACKGROUND DOCUMENT's primary FOCUS contains information pertinent to ANY ONE of the entities in the Query (including any Examples, Equivalents, Brand Names, Abbreviations, etc.)
 
 Remember: ONLY use the BACKGROUND DOCUMENT to inform your decision.
 Reply YES or NO"""
@@ -54,12 +53,10 @@ filter_prompt = ChatPromptTemplate.from_messages(
     [('system', sys_template),
     ('human', hum_template)])
 
-filter_llm = ChatOpenAI(model='gpt-4o-mini', temperature=0)
-
 @chain
 def doc_filter_chain(_input: dict):
     queries_dict, document = _input['queries_dict'], _input['document']
-    _chain = filter_prompt | filter_llm | StrOutputParser()
+    _chain = filter_prompt | FILTLLM | StrOutputParser()
 
     # split docs and integrate metadata
     split_docs = markdown_splitter_with_header.split_text(document.page_content)

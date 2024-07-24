@@ -1,98 +1,110 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.schema import SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
-from langchain_core.runnables import chain
+from langchain_core.runnables import chain, RunnableParallel
 import json
 from langchain.load import dumps, loads
 from template import meds_abbrevs_table, surg_abbrevs_table, other_abbrevs_table
-
-unify_template = f"""ABBREVIATIONS
-{meds_abbrevs_table}
-
-{surg_abbrevs_table}
-
-{other_abbrevs_table}
-END OF ABBREVIATIONS
-
-Given the a list of terms, return a unified list of terms that are equivalent or similar in meaning, using the above abbreviations and equivalency tables.
-
-Related terms can be combined with a slash (/) between them.
-Subterms can be included in parentheses after the main term, if applicable. 
-Any repeats should be removed or consolidated with or within another term.
-
-For example:
-Terms: TURP, Urolift, AEEP, PVP, B-TURP, ThuLEP, Laser Enucleation
-Output: TURP (B-TURP), AEEP / Laser Enucleation (ThuLEP), PVP, Urolift
-
-Just return single string with the unified terms separated by commas, without any additional text or formatting."""
+from constants import MULTIQUERYLLM, REPHRASINGLLM, REORGLLM
 
 
-template = f"""ABBREVIATIONS
-{meds_abbrevs_table}
+sys_template_root = f"ABBREVIATIONS\n\n{meds_abbrevs_table}\n\n{surg_abbrevs_table}\nEND OF ABBREVIATIONS"
 
-{surg_abbrevs_table}
+sys_template_multi = f"""{sys_template_root}
 
-{other_abbrevs_table}
-END OF ABBREVIATIONS
-
-You are part of an AI team that helps users find information about BPH.
-Given a user query, decide if it needs to be broken down into subquestions, in order to maximize retrieval in a vector search.
+Your task is to generate subquestions from the Query. 
 
 Rules:
-- Only create subquestions if the query asks about different diagnostic tests, medical treatments, or surgical treatments for BPH.
-- If you determine subquestions are needed, create short and succinct subquestions, each focusing on just a single treatment from the original question.
-- For treatments with multiple names/abbreviations/examples/equivalents/brand Names, include all known names/abbreviations in the subquestions.
-- Do not repeat any questions.
-- You may generate as many as necessary, depending on how many subquestions you think are needed to cover the full scope of the original question.
-- Finally, provide a single, rephrased version of the original question that encompasses all the subquestions.
-
-Remember: If you determine that the original question does not need to be broken down, return just the single rephrased version of the original question.
-
-For all subquestions, including the rephrased question: don't forget to include all known names/abbreviations for each treatment in the subquestions.
-
-Return just a JSON object in exactly this template; each subquestion should only cover a single treatment, and the rephrased question should encompass all treatments in the original question: 
+- One subquestion per ENTITY from the query
+- Each entity should be referred to by all of its names and abbreviations, per the tables provided.
 
 ```json
-{{
+{{{{
     "q1": ...,
     "q2": ...,
     ...,
     "qn": ...,
-    "rephrased": ...
-}}
+}}}}
 ```"""
 
+sys_template_rephrase = f"""{sys_template_root}
 
-prompt = ChatPromptTemplate.from_messages(
+You are part of an AI team that helps users find information about BPH.
+Given a user query and conversation context, rephrase it to maximize retrieval in a vector search.
+
+Rules:
+- Rephrase the question to be as clear and concise as possible, while still covering the full scope of the original question.
+- The rephrased question should be a single query that encompasses all the information/treatments in the original question.
+- For treatments with multiple names/abbreviations/examples/equivalents/brand Names, include all known names/abbreviations in the subquestions.
+
+Return only the rephrased query, without adding any additional extraneous information or commentary.
+
+Remember to expand all abbreviations, then include all related terms using the provided tables."""
+
+
+sys_template_reorg = f"""{sys_template_root}
+
+Your task is to use the above tables to rephrase the query so that like items are grouped, and equivalent terms are combined."""
+
+
+multi_prompt = ChatPromptTemplate.from_messages(
     [
-        SystemMessage(content=template),
+        ('system', sys_template_multi),
+        ('ai', "{treatments}\n\nConversation Context:\n{summary}"),
+        ('human', 'Query: {question}')
+    ]
+)
+rephrase_prompt = ChatPromptTemplate.from_messages(
+    [
+        ('system', sys_template_rephrase),
+        ('ai', "{treatments}\n\nConversation Context:\n{summary}"),
         ('human', 'Query: {question}')
     ]
 )
 
-unify_prompt = ChatPromptTemplate.from_messages(
+reorg_prompt = ChatPromptTemplate.from_messages(
     [
-        SystemMessage(content=unify_template),
-        ('human', 'Terms: {terms}')
+        ('system', sys_template_reorg),
+        ('human', '{question}')
     ]
 )
 
 
+def recs_string(tx_options: dict):
+    def _flatten(_input: dict):
+        return ', '.join([i for _, v in _input.items() if v for i in v])
+    strings = []
+    if tx_options.get('size'):
+        strings.append(f'Based solely on the patient\'s prostate size, guidelines recommend {_flatten(tx_options["size"])}')
+    if tx_options.get('q_s'):
+        strings.append(f'Based solely on the patient\'s interest in preservation of sexual function (including erectile & ejaculatory function), guidelines recommend {_flatten(tx_options["q_s"])}')
+    if tx_options.get('q_m'):
+        strings.append(f'Based solely on the patient\'s medical complexity (i.e. unfit or cannot have anesthesia), guidelines recommend {_flatten(tx_options["q_m"])}')
+    if tx_options.get('q_b'):
+        strings.append(f'Based solely on the patient\'s risk for bleeding / hematuria (e.g. patients on anticoagulation or antiplatelet therapy), guidelines recommend {_flatten(tx_options["q_b"])}')
+    return '\n\n'.join(strings)
 
+def _rephrase_reorganize_chain(_input: dict):
+    _rephrase_chain = rephrase_prompt | REPHRASINGLLM | StrOutputParser()  # gpt-4o
+    _reorg_chain = reorg_prompt | REORGLLM | StrOutputParser()  # gpt-4o-mini
+    _rephrased = _rephrase_chain.invoke(_input)
+    _reorg = _reorg_chain.invoke({'question': _rephrased})
+    return {'rephrased': _rephrased, 'reorganized': _reorg}
+        
 @chain
 def generate_queries(_input: dict):
-    q_raw, summary, treatments = _input['question'], _input['summary'], _input['tx_options']
+    q_raw, summary, _tx_options = _input['question'], _input['summary'], _input['tx_options']
+    treatments = recs_string(_tx_options)
 
-    unify = unify_prompt | ChatOpenAI(model='gpt-4o', temperature=0) | StrOutputParser()
-    unified_tx = unify.invoke({'terms': treatments})
+    _multi_chain = multi_prompt | MULTIQUERYLLM | StrOutputParser()  # gpt-4o
 
-    question = q_raw+'\n\n'+'discuss '+f'{unified_tx}'+'\n\n'+summary
+    _chain = RunnableParallel(__m=_multi_chain, __r=_rephrase_reorganize_chain)
+    _qs = _chain.invoke({'question': q_raw, 'summary': summary, 'treatments': treatments})
+    _qs_multi = json.loads(_qs['__m'].strip('```json\n').strip('```'))
+    _qs_rephrase = _qs['__r']['rephrased']
+    _qs_reorg = _qs['__r']['reorganized']
 
-    generate = prompt | ChatOpenAI(model='gpt-4o', temperature=0) | StrOutputParser()
-    qs = generate.invoke(question)
-    qs = json.loads(qs.strip('```json\n').strip('```'))
-    qs['original'] = question
+    qs = {**_qs_multi, 'rephrased': _qs_rephrase, 'reorganized': _qs_reorg, 'original': f"Query: {q_raw}\n\n{treatments}\n\n{summary}"}
     return qs
 
 
@@ -107,10 +119,6 @@ def get_unique_union(documents: list[list]):
 
 
 def reciprocal_rank_fusion(results: list[list], k=60):
-    """ Reciprocal_rank_fusion that takes multiple lists of ranked documents 
-        and an optional parameter k used in the RRF formula """
-    
-    # Initialize a dictionary to hold fused scores for each unique document
     fused_scores = {}
 
     # Iterate through each list of ranked documents
@@ -134,4 +142,4 @@ def reciprocal_rank_fusion(results: list[list], k=60):
     ]
 
     # Return the reranked results as a list of tuples, each containing the document and its fused score
-    return [d for d,s in reranked_results]
+    return [d for d,_ in reranked_results]

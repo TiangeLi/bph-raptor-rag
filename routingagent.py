@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
 from template import meds_abbrevs_table, surg_abbrevs_table, other_abbrevs_table
+from constants import ROUTERLLM
 
 router_template = \
 f"""ABBREVIATIONS
@@ -30,4 +30,4 @@ router_prompt = ChatPromptTemplate.from_messages(
     ]
 
 )
-router_chain = router_prompt | ChatOpenAI(model='gpt-4o-mini', temperature=0) | StrOutputParser()
+router_chain = router_prompt | ROUTERLLM | StrOutputParser()

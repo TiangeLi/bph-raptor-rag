@@ -1,8 +1,8 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
 from langchain_core.runnables import chain
 from langchain_core.documents import Document
+from constants import COMPRESSORLLM
 
 sys_template = \
 """BACKGROUND DOCUMENT
@@ -42,7 +42,7 @@ prompt = ChatPromptTemplate.from_messages(
 def compressor_chain(_input: dict):
     return _input['document']  # for now, just return the document as is, no compression
     question, doc = _input['question'], _input['document']
-    _chain = prompt | ChatOpenAI(model='gpt-4o-mini', temperature=0) | StrOutputParser()
+    _chain = prompt | COMPRESSORLLM | StrOutputParser()
     response = _chain.invoke({'question': question, 'metadata': doc.metadata, 'background': doc.page_content})
     ret = Document(response, metadata=doc.metadata)
     return ret

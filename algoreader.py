@@ -1,68 +1,87 @@
-aua_surg_algo = """AUA Decision Tree for Surgical Management of LUTS
-
-Small Prostate (<30cc): HoLEP, PVP, ThuLEP, TIPD, TUIP, TURP, TUVP
-Average Prostate (30-80cc): RWT, HoLEP, PVP, PUL, ThuLEP, TIPD, TURP, TUVP, WVTT
-Large Prostate (80-150cc) or Very Large Prostate (>150cc): Simple Prostatectomy (Open, Laparoscopic, Robotic), HoLEP, ThuLEP
-
-Patients Concerned with Preservation of Erectile and Ejaculatory Function: PUL, WVTT
-
-Medically Complicated Patients (Higher Risk of Bleeding, on Anticoagulation Drugs)
-  - Recommended Surgical Options with Lower Need for Blood Transfusion: HoLEP, PVP, ThuLEP"""
-
-cua_surg_algo = """CUA Decision Tree for Surgical Management of LUTS
-
-Small Prostate (<30cc): TUIP, M/B-TURP, Urolift
-Average Prostate (30-80cc): M/B-TURP, Greenlight PVP, AEEP, Urolift, Rezum, TUMT, Aquablation
-Large Prostate (>80cc) or Very Large Prostate (>150cc): OSP, AEEP, Greenlight PVP, B-TURP, Aquablation
-
-Medically complicated patients:
-  - Not fit for or unable to undergo anesthesia: TUMT, Urolift, Rezum, iTIND
-  - Unable to discontinue antiplatelet/anticoagulation medication: AEEP, Greenlight PVP"""
-
-eau_surg_algo = """EAU Decision Tree for Surgical Management of LUTS
-
-Small Prostate (<30cc): TUIP, TURP
-Average Prostate (30-80cc): TURP, laser enucleation, bipolar enucleation, laser vaporisation, PU Lift / Urolift
-Large Prostate (>80cc) or Very Large Prostate (>150cc): Open prostatectomy, HoLEP, bipolar enucleation, laser vaporisation, thulium enucleation, TURP
-
-Medically complicated patients:
-  - Not fit for or unable to undergo anesthesia: PU Lift / Urolift
-  - Unable to discontinue antiplatelet/anticoagulation medication: laser vaporisation, laser enucleation
-
-* Laser vaporisation includes GreenLight, thulium, and diode laser vaporisation.
-* Laser enucleation includes holmium and thulium laser enucleation (HoLEP, ThuLEP)"""
-
-
-
-
-
-
-
-algo_template = \
-"""You're an AI assistant that helps users find information about BPH.
-Given a user query, use the given decision tree algorithm to provide just a list of surgical options relevant to the user.
-
-If the user query is not relevant or applicable to this decision tree, reply None
-If the user query is relevant BPH management, especially if with respect to surgical therapies, prostate size, sexual function, medical complexity (including patients at risk of bleeding, taking anticoagulation, or who cannot have anesthetics), or other related topics, reply using the response template.
-
-Template: treatment1, treatment2, treatment3, ...
-Example: TURP, PVP, TUIP
-
-Algorithm:
-```{algo}```
-
-Conversation summary:
-{summary}"""
-
-
-from langchain_openai import ChatOpenAI
+import json
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import chain
+from constants import ALGOLLM
+
+algorithms = {
+    '<30cc': {
+        'aua': ['HoLEP', 'ThuLEP', 'PVP', 'TUIP', 'TURP', 'TIPD', 'TUVP'],
+        'cua': ['TUIP', 'Urolift', 'M/B-TURP'],
+        'eau': ['TUIP', 'TURP']
+    },
+    '30-80cc': {
+        'aua': ['HoLEP', 'ThuLEP', 'PVP', 'TURP', 'PUL', 'WVTT', 'RWT', 'TIPD', 'TUVP'],
+        'cua': ['AEEP', 'Greenlight PVP', 'M/B-TURP', 'Urolift', 'Rezum', 'Aquablation', 'TUMT'],
+        'eau': ['Laser enucleation', 'Laser vaporisation', 'TURP', 'PU Lift / Urolift', 'Bipolar enucleation']
+    },
+    '>80cc': {
+        'aua': ['Simple Prostatectomy (Open, Laparoscopic, Robotic)', 'HoLEP', 'ThuLEP'],
+        'cua': ['OSP', 'AEEP', 'Greenlight PVP', 'B-TURP', 'Aquablation'],
+        'eau': ['Open prostatectomy', 'HoLEP', 'ThuLEP', 'laser vaporisation', 'TURP', 'bipolar enucleation']
+    },
+    'q_s': { # sexual preservation (erectile & ejaculatory)
+        'aua': ['PUL', 'WVTT']
+    },
+    'q_m': { # medically complicated (anesthesia risk)
+        'aua': ['HoLEP', 'ThuLEP', 'PVP'],
+        'cua': ['Urolift', 'Rezum', 'iTIND', 'TUMT'],
+        'eau': ['PU Lift / Urolift']
+    },
+    'q_b': { # medically complicated (bleeding risk)
+        'aua': ['HoLEP', 'ThuLEP', 'PVP'],
+        'cua': ['AEEP', 'Greenlight PVP'],
+        'eau': ['laser enucleation', 'laser vaporisation']
+    }
+}
+
+
+sys_template = \
+"""Last updated conversation context:
+{summary}
+
+Given a user query and the conversation context, extract the following information using the following template, using ONLY the provided answer choices:
+
+```json
+{{
+    "size": "prostate size (choices: <30cc, 30-80cc, >80cc; none if not applicable)",
+    "q_s": "is the user concerned about or interested in preservation of sexual function, including erectile and/or ejaculatory function? (choices: yes, no; none if not applicable)", 
+    "q_m": "is the user medically complicated, i.e. unfit or cannot have anesthesia for any reason? (choices: yes, no; none if not applicable)",
+    "q_b": "is the user at risk for bleeding or post procedural hematuria, such as patients on anticoagulation or antiplatelet therapy? (choices: yes, no; none if not applicable)",
+}}
+```
+
+Remember to return only the json template, using only the categories and choices provided. Do not include any additional information or context in your response."""
 
 prompt = ChatPromptTemplate.from_messages(
     [
-        ('system', algo_template),
-        ('human', 'Query: {question}')
+        ('system', sys_template),
+        ('human', "Query: {question}")
     ]
 )
-tx_algo_chain = prompt | ChatOpenAI(model='gpt-4o-mini', temperature=0) | StrOutputParser()
+
+def get_recs_sentence(header: str, input: dict):
+    lines = [f'{algo.upper()} Guidelines recommend: {recs}' for algo, recs in input.items()]
+    return f'{header} {', '.join(lines)}.' if lines else None
+
+@chain
+def tx_algo_chain(_input):
+    question, summary = _input['question'], _input['summary']
+    _chain = prompt | ALGOLLM | StrOutputParser()
+    _llmresp = _chain.invoke({'question': question, 'summary': summary})
+    _llmresp = json.loads(_llmresp.strip('```json\n').strip('```'))
+    ans = {
+        'size': algorithms.get(_llmresp['size'], {}),
+        'q_s': algorithms['q_s'] if _llmresp['q_s'].lower().strip() == 'yes' else {},
+        'q_m': algorithms['q_m'] if _llmresp['q_m'].lower().strip() == 'yes' else {},
+        'q_b': algorithms['q_b'] if _llmresp['q_b'].lower().strip() == 'yes' else {}
+    }
+    ret = {
+        'size': get_recs_sentence(header=f'Based solely on the patient\'s prostate size of {_llmresp['size']}:', input=ans['size']),
+        'q_s': get_recs_sentence(header='Based solely on the patient\'s interest in preservation of sexual function (including erectile & ejaculatory function):', input=ans['q_s']),
+        'q_m': get_recs_sentence(header='Based solely on the patient\'s medical complexity (i.e. unfit or cannot have anesthesia):', input=ans['q_m']),
+        'q_b': get_recs_sentence(header='Based solely on the patient\'s risk for bleeding / hematuria (e.g. patients on anticoagulation or antiplatelet therapy):', input=ans['q_b']),
+        'metadata': {k:v for k, v in ans.items() if v}
+    }
+
+    return ret
